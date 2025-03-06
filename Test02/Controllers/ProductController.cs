@@ -4,14 +4,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.Json;
 using Microsoft.EntityFrameworkCore.Update.Internal;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.VisualBasic;
-using System.Net.WebSockets;
 using Test02.Constants;
 using Test02.Constants.metadata;
 using Test02.Models;
-using Test02.Payload.Request;
 using Test02.Payload.Response;
-using Test02.Repository.Product;
 using static System.Runtime.InteropServices.JavaScript.JSType;
 using static Test02.Constants.ApiEndPointConstant;
 using Product = Test02.Models.Product;
@@ -27,101 +23,38 @@ namespace Test02.Controllers
     {
         private readonly AppDbcontext _dbcontext;
         private readonly IConfiguration _configuration;
-        //private readonly ItemRepository _repository;
-        public ProductController(AppDbcontext appDbcontext, IConfiguration configuration )
+        public ProductController(AppDbcontext appDbcontext, IConfiguration configuration)
         {
             _dbcontext = appDbcontext;
             _configuration = configuration;
-            //_repository = repository;    
         }
         // GET: api/<ProductController>
         [HttpGet(ApiEndPointConstant.Product.Products)]
-        public async Task<ActionResult<IEnumerable<ProductDTO>>> getAllProduct([FromQuery] PaginationParams  paginationParams )
+        public async Task<ActionResult<IEnumerable<ProductDTO>>> getAllProduct()
         {
-            var totalItems = await _dbcontext.Products.CountAsync();
-            
-            IQueryable<Product> query = _dbcontext.Products;  
-            if (totalItems == 0)
-            {
-                return NotFound(new
-                {
-                    message = "No product found",
-                    statusCode = StatusCodes.Status404NotFound
-                });
-            }       
-            if (!string.IsNullOrEmpty(paginationParams.search))
-            {
-                query = query.Where(p => p.Name.Contains(paginationParams.search.Trim()));
-            }
-            if(!string.IsNullOrEmpty(paginationParams.sort))
-            {
-                var sortParts = paginationParams.sort.Split('-');   
-                var sortField = sortParts[0];   
-                var sortDirection = sortParts.Length > 1 ? sortParts[1]?.Trim().ToLower() : "asc";
-                switch (sortField)
-                {
-                    case "name":
-                        query = sortDirection == "desc" ? query.OrderByDescending(p => p.Name) : query.OrderBy(p => p.Name);
-                        break;
-                    case "price":
-                        query  = sortDirection == "desc" ? query.OrderByDescending(p => p.Price) : query.OrderBy(p => p.Price);
-                        break;
-                    case "quantity":
-                        query = sortDirection == "desc" ? query.OrderByDescending(p => p.Quantity) : query.OrderBy(p => p.Quantity);
-                        break;      
-                    case "category":
-                        query = sortDirection == "desc" ? query.OrderByDescending(p => p.CategoryId) : query.OrderBy(p => p.CategoryId);
-                        break;
-                    default: 
-                        query = query.OrderBy(p => p.Id);
-                        break;
-                }
-            }else
-            {
-                query = query.OrderBy(p => p.Id);    
-            }
-
-            var productListResponse = await query.Select(p => new ProductDTO
+            var productListResponse = await _dbcontext.Products.Select( p => new ProductDTO
             {
                 Id = p.Id,
                 Name = p.Name,
                 image = p.image,
                 Quantity = p.Quantity,
-                Price = p.Price,
+                Price = p.Price, 
                 CategoryId = p.CategoryId
-            }).Skip((paginationParams.PageNumber - 1) * paginationParams.PageSize).Take(paginationParams.PageSize).ToListAsync();
-            
 
-            var result = new PageResult<ProductDTO>
-            {
-                Data = productListResponse,
-                CurrentPage = paginationParams.PageNumber,
-                PageSize = paginationParams.PageSize,
-                TotalItems = totalItems,
-            };
-             
+            }).ToListAsync();
 
             if (productListResponse == null)
-            {   
-                return NotFound(new
-                {
-                    message = "No product found",
-                    statusCode = StatusCodes.Status404NotFound
-                });
+            {
+                return NotFound();
             }
-            var successReponse = ApiResponseBuilder.BuildPageResponse<ProductDTO>(
-                  items: productListResponse,
-                  totalPages: result.TotalPages,
-                  totalItems: totalItems,
-                  message: "Get Product Success",
-                  currentPage: result.CurrentPage,
-                  pageSize: result.PageSize , 
-                  hasNext : result.HasNext, 
-                  hasPrevious: result.HasPrevious
-             );
+
 
             return Ok(
-                successReponse
+                ApiResponseBuilder.BuildResponse(
+                    message: "Get Product Success",
+                    statusCode: StatusCodes.Status200OK,
+                    data: productListResponse
+                )
              );
         }
 
@@ -132,14 +65,7 @@ namespace Test02.Controllers
             try
             {
                 var product = await _dbcontext.Products.FindAsync(id);  
-                if (product == null)
-                {
-                    return NotFound(new
-                    {
-                        statusCode = StatusCodes.Status404NotFound,  
-                        message  = "Not Found",
-                    });
-                }
+                if (product == null) return NotFound();
                 var successResponse = ApiResponseBuilder.BuildResponse<ProductDTO>(
                     message: "Get Product Success",
                     statusCode: StatusCodes.Status200OK,

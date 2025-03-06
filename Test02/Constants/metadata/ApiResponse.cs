@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using Microsoft.AspNetCore.Components.Forms;
+using System.Text.Json.Serialization;
 
 namespace Test02.Constants.metadata
 {
@@ -18,6 +19,23 @@ namespace Test02.Constants.metadata
         public bool IsSuccess { get; set; }
 
         [JsonPropertyName("data")]
+        
         public T? Data { get; set; }
+
+        //[JsonPropertyName("pageNumber")]
+        //public int PageNumber { get; set; }
+
+        //[JsonPropertyName("pageSize")]
+
+        //public int PageSize { get; set; }
+
+        //[JsonPropertyName("totalItems")]
+        //public int TotalItems { get; set; }
+
+        //[JsonPropertyName("totalPages")] 
+        //public int TotalPages { get; set; }
+
+
+
     }
 }

@@ -122,6 +122,7 @@ namespace Test02.Controllers
             _context.Categories.Remove(category);
             await _context.SaveChangesAsync();
             return NoContent();
+            
         }
 
         public class createCateReq

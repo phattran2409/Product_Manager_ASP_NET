@@ -1,7 +1,11 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Collections;
+using Test02.Constants;
+using Test02.Constants.metadata;
 using Test02.Models;
+using Test02.Payload.Response;
 
 namespace Test02.Controllers
 {
@@ -16,35 +20,69 @@ namespace Test02.Controllers
             _context = context;
         }
 
-        [HttpGet("all")]
+        [HttpGet(ApiEndPointConstant.Category.Categories)]
         public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
         {
             //return await _context.Categories.Include(c => c.products).ToListAsync();
-            return await _context.Categories.ToListAsync(); 
+            return await _context.Categories.ToListAsync();
         }
 
-        [HttpGet("getById/{id}")]
-        public async Task<ActionResult<Category>> GetCategory(int id)
+        [HttpGet(ApiEndPointConstant.Category.CategoryId)]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        public async Task<ActionResult<CategoryDTO>> GetCategory(int id)
         {
-            var category = await _context.Categories.Include(c => c.Id).FirstOrDefaultAsync(c => c.Id == id);
-            if (category == null) return NotFound();
-            return category;
+            var res = await _context.Categories.Include(c => c.Id).FirstOrDefaultAsync(c => c.Id == id);
+            if (res == null) return NotFound();
+
+            if (res == null)
+            {
+
+                var notFound = ApiResponseBuilder.BuildErrorResponse<CategoryDTO>(
+                    data: null,
+                    message: $"Category with ID {id} not found",
+                    statusCode: StatusCodes.Status404NotFound,
+                    reason: "Resource not found"
+                );
+
+                return NotFound(notFound);
+            }
+            var category = new CategoryDTO()
+            {
+                Id = res.Id,
+                Name = res.Name
+            };
+            var categoryRespone = ApiResponseBuilder.BuildResponse<CategoryDTO>(
+                data: category,
+                message: "Get Category Success",
+                statusCode: StatusCodes.Status200OK
+
+            );
+            return Ok(categoryRespone);
+
+
         }
 
-        [HttpPost("create")]
-        public async Task<ActionResult<Category>> CreateCategory([FromBody] createCateReq  req)
+        [HttpPost(ApiEndPointConstant.Category.CreateCategory)]
+        public async Task<ActionResult<Category>> CreateCategory([FromBody] createCateReq req)
         {
-            if (_context.Categories.Any(c => c.Name == req.Name) )
+            if (_context.Categories.Any(c => c.Name == req.Name))
             {
                 return BadRequest("Category Name was created");
             }
-            var newCategory  = new Category { Id  = req.Id  , Name = req.Name};
-          _context.Categories.Add(newCategory);
-            await _context.SaveChangesAsync();  
-            return Ok(newCategory);  
+            var newCategory = new Category { Id = req.Id, Name = req.Name };
+            _context.Categories.Add(newCategory);
+            await _context.SaveChangesAsync();
+
+
+            return Ok(ApiResponseBuilder.BuildResponse<Category>(
+                 statusCode: StatusCodes.Status200OK,
+                 message: "Create Category Success",
+                 data: newCategory
+             ));
         }
 
-        [HttpPut("update/{id}")]
+        [HttpPut(ApiEndPointConstant.Category.UpdateCategory)]
         public async Task<IActionResult> UpdateCategory(int id, Category category)
         {
             if (id != category.Id)
@@ -68,10 +106,15 @@ namespace Test02.Controllers
                     throw;
             }
 
-            return NoContent();
+            return Ok(new
+            {
+                message = "Update Category Success",
+                statusCode = StatusCodes.Status200OK,
+            }
+             );
         }
 
-        [HttpDelete("delete/{id}")]
+        [HttpDelete(ApiEndPointConstant.Category.UpdateCategory)]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             var category = await _context.Categories.FindAsync(id);

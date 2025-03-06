@@ -8,7 +8,11 @@ using System.Net.WebSockets;
 using System.Runtime.InteropServices;
 using System.Security.Claims;
 using System.Text;
+using Test02.Constants;
+using Test02.Constants.metadata;
 using Test02.Models;
+using Test02.Payload.Request;
+using Test02.Payload.Response;
 
 
 namespace Test02.Controllers
@@ -26,34 +30,49 @@ namespace Test02.Controllers
             _configuration = configuration; 
         }
 
-        [HttpPost("SignUp")]
-        public async Task<IActionResult> SignUp([FromBody] SignUpRequest request)
+        [HttpPost(ApiEndPointConstant.Auth.authRegister)]
+        public async Task<IActionResult> SignUp([FromBody] AuthRequest.Register request)
         {
-            if (_context.Users.Any(u => u.UserName == request.UserName))
+            if (_context.Users.Any(u => u.Email == request.Email))
             {
-                return BadRequest("UserName already exists");
+                return BadRequest("Email already exists");
             }
              
             var passwordHash  = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            var user = new User { UserName = request.UserName, Password = passwordHash, Name = request.name, Email = request.email , role = "user" , status = "active" };  
+            var user = new User { UserName = request.UserName, Password = passwordHash, Name = request.Name, Email = request.Email, role = "user" , status = "active" };  
 
             _context.Users.Add(user);   
             
-            await _context.SaveChangesAsync();  
-            return Ok("User Registered susccesFully");    
+            await _context.SaveChangesAsync();
+            return Ok(
+                new {
+                    message = "Register success",
+                    statusCode =  StatusCodes.Status200OK,
+                }
+            );
+            
           
         }
 
-        [HttpPost("Login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest req)
+        [HttpPost(ApiEndPointConstant.Auth.authLogin)]
+        public ActionResult<IEnumerable<UserDTO>> Login([FromBody] AuthRequest.Login req)
         {
             var userLogin = _context.Users.FirstOrDefault(u => u.UserName == req.UserName);
-            if (userLogin == null ||  !BCrypt.Net.BCrypt.Verify(req.Password , userLogin.Password))
+            if (userLogin == null || !BCrypt.Net.BCrypt.Verify(req.Password, userLogin.Password))
             {
-               return Unauthorized("Invalid Username or password");
+                return Unauthorized("Invalid Username or password");
             }
             var token = GenerateJwtToken(userLogin);
-            return Ok( new {Token = token});
+            UserDTO userResponse = new UserDTO
+            {
+                Id = userLogin.Id,
+                Name = userLogin.Name,
+                UserName = userLogin.UserName,
+                Email = userLogin.Email,
+                status = userLogin.status,
+                role = userLogin.role
+            };
+            return Ok(new { Token = token, user =  userResponse});
         }
 
         private string GenerateJwtToken(User user)
@@ -88,19 +107,4 @@ namespace Test02.Controllers
         }
     }
 
-    public class SignUpRequest
-    {
-         public string UserName { get; set; }   
-        public string Password { get; set; }    
-        public string name { get; set; } 
-        public string email { get; set; }    
-
-            
-    }
-
-    public class LoginRequest
-    {
-        public string UserName { get; set; }
-        public string Password { get; set; }
-    }
 }

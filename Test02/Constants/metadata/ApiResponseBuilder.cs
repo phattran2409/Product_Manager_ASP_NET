@@ -1,4 +1,6 @@
-﻿namespace Test02.Constants.metadata
+﻿
+
+namespace Test02.Constants.metadata
 {
     public class ApiResponseBuilder
     {
@@ -32,6 +34,8 @@
                 //Reason = reason
             };
         }
+
+
 
         // This method is used to build a response object for list/pagination data
         //public static ApiResponse<PagingResponse<T>> BuildPageResponse<T>(

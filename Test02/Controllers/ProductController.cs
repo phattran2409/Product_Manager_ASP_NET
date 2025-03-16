@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.JsonPatch;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.Json;
 using Microsoft.EntityFrameworkCore.Update.Internal;
@@ -36,7 +37,7 @@ namespace Test02.Controllers
         }
         // GET: api/<ProductController>
         [HttpGet(ApiEndPointConstant.Product.Products)]
-        public async Task<ActionResult<IEnumerable<ProductDTO>>> getAllProduct([FromQuery] PaginationParams  paginationParams )
+        public async Task<ActionResult<IEnumerable<ProductDTO>>> getAllProduct([FromQuery] PaginationParams  paginationParams , ProductReq req)
         {
             var totalItems = await _dbcontext.Products.CountAsync();
             
@@ -49,13 +50,47 @@ namespace Test02.Controllers
                     statusCode = StatusCodes.Status404NotFound
                 });
             }       
-            if (!string.IsNullOrEmpty(paginationParams.search))
+            if (!string.IsNullOrEmpty(req.search))
             {
-                query = query.Where(p => p.Name.Contains(paginationParams.search.Trim()));
+                query = query.Where(p => p.Name.Contains(req.search.Trim()));
             }
-            if(!string.IsNullOrEmpty(paginationParams.sort))
+
+            if (req.isNew.HasValue || req.isSale.HasValue)
             {
-                var sortParts = paginationParams.sort.Split('-');   
+                if (req.isNew == true || req.isSale == true)
+                {
+                    if (req.isNew == true)
+                    {
+                        query = query.Where(p => p.isNew == true);
+                    }
+
+                    if (req.isSale == true)
+                    {
+                        query = query.Where(p => p.isSale == true);
+                    }
+                }
+                else
+                {
+                    if (req.isNew == false)
+                    {
+                        query = query.Where(p => p.isNew == false);
+                    }
+
+                    if (req.isSale == false)
+                    {
+                        query = query.Where(p => p.isSale == false);
+                    }
+                }    
+            }
+
+            if (req.categoryId.HasValue)
+            {
+                query = query.Where(p => p.CategoryId == req.categoryId);  
+            }
+            
+            if (!string.IsNullOrEmpty(req.sort))
+            {
+                var sortParts = req.sort.Split('-');   
                 var sortField = sortParts[0];   
                 var sortDirection = sortParts.Length > 1 ? sortParts[1]?.Trim().ToLower() : "asc";
                 switch (sortField)
@@ -68,10 +103,7 @@ namespace Test02.Controllers
                         break;
                     case "quantity":
                         query = sortDirection == "desc" ? query.OrderByDescending(p => p.Quantity) : query.OrderBy(p => p.Quantity);
-                        break;      
-                    case "category":
-                        query = sortDirection == "desc" ? query.OrderByDescending(p => p.CategoryId) : query.OrderBy(p => p.CategoryId);
-                        break;
+                        break;     
                     default: 
                         query = query.OrderBy(p => p.Id);
                         break;
@@ -88,7 +120,9 @@ namespace Test02.Controllers
                 image = p.image,
                 Quantity = p.Quantity,
                 Price = p.Price,
-                CategoryId = p.CategoryId
+                CategoryId = p.CategoryId,
+                isNew = p.isNew,
+                isSale = p.isSale 
             }).Skip((paginationParams.PageNumber - 1) * paginationParams.PageSize).Take(paginationParams.PageSize).ToListAsync();
             
 
@@ -164,7 +198,7 @@ namespace Test02.Controllers
 
         // POST api/<ProductController>
         [HttpPost(ApiEndPointConstant.Product.CreateProduct)]
-        public async Task<ActionResult<ProductDTO>> createProduct([FromBody] productReq req)
+        public async Task<ActionResult<ProductDTO>> createProduct([FromBody] ProductDTO req)
         {
             if (_dbcontext.Products.Any(p => p.Name == req.Name))
             {
@@ -178,6 +212,7 @@ namespace Test02.Controllers
                     data = req
                 });
             }
+            
             var newProduct = new Product { Name = req.Name.Trim(), Price = req.Price, image = req.image.Trim() , Quantity = req.Quantity , CategoryId = req.CategoryId };
             
             _dbcontext.Products.Add(newProduct);
@@ -278,13 +313,13 @@ namespace Test02.Controllers
 
         }
     }
-    public class productReq
-    {
-        public string Name { get; set; }
-        public decimal Price { get; set; }
-        public decimal Quantity { get; set; }
-        public string image { get; set; }
-        public int CategoryId { get; set; }
-    }
+    //public class productReq
+    //{
+    //    public string Name { get; set; }
+    //    public decimal Price { get; set; }
+    //    public decimal Quantity { get; set; }
+    //    public string image { get; set; }
+    //    public int CategoryId { get; set; }
+    //}
 
 }

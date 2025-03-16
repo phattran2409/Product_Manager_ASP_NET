@@ -21,10 +21,41 @@ namespace Test02.Controllers
         }
 
         [HttpGet(ApiEndPointConstant.Category.Categories)]
-        public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
+        public async Task<ActionResult<CategoryDTO>> GetCategories()
         {
-            //return await _context.Categories.Include(c => c.products).ToListAsync();
-            return await _context.Categories.ToListAsync();
+            try
+            {
+                var category = await _context.Categories.Select(c => new CategoryDTO
+                {
+                    Id = c.Id,
+                    Name = c.Name
+                }).ToListAsync();
+
+                if (category == null)
+
+                {
+                    return NotFound(
+                         ApiResponseBuilder.BuildErrorResponse<IEnumerable<CategoryDTO>>(
+                            data: null,
+                            message: "Category not found",
+                            statusCode: StatusCodes.Status404NotFound,
+                            reason: "Resource not found"
+                        )
+                    );
+                }
+
+                var response = ApiResponseBuilder.BuildResponse<IEnumerable<CategoryDTO>>(
+                    data: category,
+                    message: "Get Categories Success",
+                    statusCode: StatusCodes.Status200OK
+                );  
+
+                return Ok(response);  
+            } catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+            }   
+
         }
 
         [HttpGet(ApiEndPointConstant.Category.CategoryId)]
@@ -92,20 +123,7 @@ namespace Test02.Controllers
                 return NotFound("Category not found.");
 
             // Update only modified fields
-            existingCategory.Name = category.Name;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!_context.Categories.Any(e => e.Id == id))
-                    return NotFound();
-                else
-                    throw;
-            }
-
+            existingCategory.Name = category.Name.Length > 0 ?  category.Name : existingCategory.Name;
             return Ok(new
             {
                 message = "Update Category Success",
@@ -114,7 +132,7 @@ namespace Test02.Controllers
              );
         }
 
-        [HttpDelete(ApiEndPointConstant.Category.UpdateCategory)]
+        [HttpDelete(ApiEndPointConstant.Category.DeleteCategory)]
         public async Task<IActionResult> DeleteCategory(int id)
         {
             var category = await _context.Categories.FindAsync(id);

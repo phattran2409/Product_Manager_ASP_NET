@@ -8,7 +8,8 @@
         public decimal? Quantity { get; set; }
 
         public string? image { get; set; }
-
+        public bool isNew { get; set; } 
+        public bool isSale { get; set; }   
         public int? CategoryId { get; set; }
     }
 }

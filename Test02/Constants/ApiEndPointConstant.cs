@@ -12,8 +12,18 @@ namespace Test02.Constants
         {
             public const string authLogin = ApiEndPoint + "/auth/login";   
             public const string authRegister = ApiEndPoint + "/auth/register";  
+            public const string authMe = ApiEndPoint + "/auth/me";
 
         }
+
+        public static class user
+        {
+            public const string Users = ApiEndPoint + "/users"; 
+            public const string UserId = Users + "/{id}";   
+            public const string CreateUser = Users + "/create"; 
+            public const string UpdateUser = Users + "/update/{id}";    
+            public const string DeleteUser = Users + "/delete/{id}";   
+        } 
 
         public static class Product
         {

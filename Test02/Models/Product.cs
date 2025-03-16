@@ -12,8 +12,12 @@ namespace Test02.Models
         public string image { get; set; }   
 
         public int? CategoryId { get; set; }
+
+        public bool isNew { get; set; }  
         
-        
+        public bool isSale { get; set; }    
+
+
         public Category? Category { get; set; }
        
       

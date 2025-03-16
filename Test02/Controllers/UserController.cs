@@ -1,18 +1,14 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Net.WebSockets;
-using System.Runtime.InteropServices;
+﻿
 using System.Security.Claims;
-using System.Text;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Test02.Constants;
 using Test02.Constants.metadata;
 using Test02.Models;
 using Test02.Payload.Request;
 using Test02.Payload.Response;
+
 
 
 namespace Test02.Controllers
@@ -21,90 +17,208 @@ namespace Test02.Controllers
     [ApiController]
     public class UserController : ControllerBase
     {
-         private readonly AppDbcontext  _context;
-        private  readonly IConfiguration _configuration;
-        
-        public UserController(AppDbcontext appDbcontext, IConfiguration configuration)
+        private readonly AppDbcontext _dbcontext;   
+
+        public UserController(AppDbcontext appDbcontext)
         {
-            _context  = appDbcontext;  
-            _configuration = configuration; 
-        }
+            _dbcontext = appDbcontext;  
+        }   
 
-        [HttpPost(ApiEndPointConstant.Auth.authRegister)]
-        public async Task<IActionResult> SignUp([FromBody] AuthRequest.Register request)
-        {
-            if (_context.Users.Any(u => u.Email == request.Email))
-            {
-                return BadRequest("Email already exists");
-            }
-             
-            var passwordHash  = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            var user = new User { UserName = request.UserName, Password = passwordHash, Name = request.Name, Email = request.Email, role = "user" , status = "active" };  
-
-            _context.Users.Add(user);   
-            
-            await _context.SaveChangesAsync();
-            return Ok(
-                new {
-                    message = "Register success",
-                    statusCode =  StatusCodes.Status200OK,
-                }
-            );
-            
-          
-        }
-
-        [HttpPost(ApiEndPointConstant.Auth.authLogin)]
-        public ActionResult<IEnumerable<UserDTO>> Login([FromBody] AuthRequest.Login req)
-        {
-            var userLogin = _context.Users.FirstOrDefault(u => u.UserName == req.UserName);
-            if (userLogin == null || !BCrypt.Net.BCrypt.Verify(req.Password, userLogin.Password))
-            {
-                return Unauthorized("Invalid Username or password");
-            }
-            var token = GenerateJwtToken(userLogin);
-            UserDTO userResponse = new UserDTO
-            {
-                Id = userLogin.Id,
-                Name = userLogin.Name,
-                UserName = userLogin.UserName,
-                Email = userLogin.Email,
-                status = userLogin.status,
-                role = userLogin.role
-            };
-            return Ok(new { Token = token, user =  userResponse});
-        }
-
-        private string GenerateJwtToken(User user)
-        {
-
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["Jwt:Key"]));
-            var creds = new SigningCredentials(key , SecurityAlgorithms.HmacSha256);
-
-            var claims = new[]
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.UserName), 
-                new Claim(ClaimTypes.Role , user.role), 
-            };
-       
-            var token = new JwtSecurityToken(
-                _configuration["Jwt:Issuer"],       
-                _configuration["Jwt:Audience"], 
-                claims : claims,
-                expires : DateTime.Now.AddHours(1),
-                signingCredentials  : creds
-            ); 
-            
-            return new JwtSecurityTokenHandler().WriteToken(token);
-        }
-
-        [HttpGet("admin")]
+        [HttpGet(ApiEndPointConstant.user.Users)]
         [Authorize(Roles = "Admin")]
-         public IActionResult getProfileDashboard()
+        public async Task<ActionResult<IEnumerable<UserDTO>>> GetUsers([FromQuery] PaginationParams paginationParams ,[FromQuery] UserReq req)
         {
-            return Ok(new { Message = "THIS IS A FUNCTION OF ADMIN ! " });
-        }
-    }
+            try
+            {
+                var totalItems = await _dbcontext.Users.CountAsync();
 
+                if (totalItems == 0)
+                {
+                    return NotFound(new
+                    {
+                        message = "User not found",
+                    });
+                }
+
+                IQueryable<User> query = _dbcontext.Users;
+
+                if (!string.IsNullOrEmpty(req.search))
+                {
+                    query = query.Where(p => p.Name.Contains(req.search) || p.UserName.Contains(req.search));
+                }
+
+                if (!string.IsNullOrEmpty(req.Email))
+                {
+                    query = query.Where(x => x.Email == req.Email);
+                }
+                if (!string.IsNullOrEmpty(req.status))
+                {
+                    query = query.Where(x => x.status == req.status);
+                }   
+
+                if (!string.IsNullOrEmpty(req.role))
+                {
+                    query = query.Where(x => x.role == req.role);
+                }
+
+                var users = await query.Select(p => new UserDTO
+                {
+                    Id = p.Id,
+                    Name = p.Name,
+                    UserName = p.UserName,
+                    Email = p.Email,
+                    status = p.status,
+                    role = p.role
+                }).Skip((paginationParams.PageNumber - 1) * paginationParams.PageSize).Take(paginationParams.PageSize).ToListAsync();
+
+
+                var result = new PageResult<UserDTO>
+                {
+                    Data = users,
+                    CurrentPage = paginationParams.PageNumber,
+                    PageSize = paginationParams.PageSize,
+                    TotalItems = totalItems,
+                };
+
+                var successResponse = ApiResponseBuilder.BuildPageResponse<UserDTO>(
+                    items: users,
+                    totalPages: result.TotalPages,
+                    totalItems: totalItems,
+                    message: "Get User Success",
+                    currentPage: result.CurrentPage,
+                    pageSize: result.PageSize,
+                    hasNext: result.HasNext,
+                    hasPrevious: result.HasPrevious
+                );
+
+
+
+
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+            } 
+        }
+
+        [HttpPost(ApiEndPointConstant.user.CreateUser)]
+        [Authorize(Roles = "Admin")]
+        public async Task<ActionResult<IEnumerable<UserDTO>>> CreateUser([FromBody] UserDTO newUser)
+        {
+            try
+            {
+                IQueryable<User> query = _dbcontext.Users;
+                if (newUser == null)
+                {
+                    return BadRequest(new
+                    {
+                        message = "User is required",
+                    });
+                }   
+                
+                if (!string.IsNullOrEmpty(newUser.UserName) || !string.IsNullOrEmpty(newUser.Email))
+                {
+                     var existUserName = query.Where(x => x.UserName == newUser.UserName).FirstOrDefault(); 
+                     var existEmail = query.Where(x => x.Email == newUser.Email).FirstOrDefault();  
+                    if (existUserName != null)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Username already exist",
+                            StatusCode = StatusCodes.Status400BadRequest    
+                        });
+                    }
+
+                    if (existEmail != null)
+                    {
+                        return BadRequest(new
+                        {
+                            message = "Email already exist",
+                            StatusCode = StatusCodes.Status400BadRequest
+                        }); 
+                    }
+                }   
+
+                var newUserModel = new User
+                {
+                    Name = newUser.Name,
+                    UserName = newUser.UserName,
+                    Email = newUser.Email,
+                    status = newUser.status,
+                    role = newUser.role
+                };
+                await _dbcontext.Users.AddAsync(newUserModel); 
+                
+                await _dbcontext.SaveChangesAsync();  
+                
+                var successReponse = ApiResponseBuilder.BuildResponse<User>(
+                    data: newUserModel,
+                    statusCode: StatusCodes.Status201Created,
+                    message: "Create User Success"  
+                );  
+
+                return Ok(successReponse);    
+
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Unauthorized"});
+            }
+        }
+
+        [HttpPut(ApiEndPointConstant.user.UpdateUser)]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<UserDTO>>> UpdateUser([FromBody] UserDTO updateUser)
+        {
+            try
+            {
+                IQueryable<User> query = _dbcontext.Users;
+                var UserIdFromToken = GetUserIdFromToken();  
+                var existUser = query.Where(x => x.Id == updateUser.Id).FirstOrDefault();
+                
+                if (existUser == null)
+                {
+                    return NotFound(new
+                    {
+                        message = "User not found",
+                        StatusCode = StatusCodes.Status404NotFound
+                    }); 
+                }
+
+                var isAdmin = User.IsInRole("Admin");
+                if (!isAdmin && existUser.Id.ToString() != UserIdFromToken)
+                {
+                    return Forbid();
+                }
+
+                
+                if (!string.IsNullOrEmpty(updateUser.UserName))
+                {
+                    existUser.UserName = updateUser.UserName;  
+                }
+                if (!string.IsNullOrEmpty(updateUser.Email))
+                {
+                    existUser.Email = updateUser.Email;
+                }
+
+                if (!string.IsNullOrEmpty(updateUser.Name))
+                {
+                    existUser.Name = updateUser.Name;
+                } 
+                
+                return Ok();
+            }
+            catch (Exception e)
+            {
+               return StatusCode(500, new { message = "Unauthorized" });     
+            }  
+        }
+
+        public string GetUserIdFromToken()
+        {
+            var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            return idClaim;
+        }   
+    }
 }

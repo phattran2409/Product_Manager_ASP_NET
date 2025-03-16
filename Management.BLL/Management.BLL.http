@@ -1,0 +1,6 @@
+@Management.BLL_HostAddress = http://localhost:5091
+
+GET {{Management.BLL_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
